@@ -1,40 +1,61 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+/**
+ * Local credential store (~/.pde-gate/credentials.json).
+ * Production: written by `pde-gate register` after portal OAuth / token issue.
+ * CI: use PDE_ORG_TOKEN env var instead (no local file).
+ */
 
-export type Credentials = {
-  org_id: string;
-  api_key: string;
-  api_url?: string;
+import fs from "node:fs";
+import { gateConfigDir, gateConfigPaths, type GateEndpoints, resolveEndpoints } from "./gate-config.js";
+
+export type StoredCredentials = {
+    org_id: string;
+    token: string;
+    registered_at: string;
+    portal_url?: string;
+    api_url?: string;
 };
 
-export function credentialsPath(): string {
-  return process.env.PDE_CREDENTIALS_FILE || path.join(os.homedir(), ".pde-gate", "credentials.json");
+export function loadStoredCredentials(): StoredCredentials | null {
+    const { credentialsFile } = gateConfigPaths();
+    if (!fs.existsSync(credentialsFile)) {
+        return null;
+    }
+    const raw = JSON.parse(fs.readFileSync(credentialsFile, "utf8")) as Partial<StoredCredentials>;
+    if (!raw.org_id || !raw.token) {
+        return null;
+    }
+    return {
+        org_id: String(raw.org_id),
+        token: String(raw.token),
+        registered_at: String(raw.registered_at ?? new Date().toISOString()),
+        portal_url: raw.portal_url ? String(raw.portal_url) : undefined,
+        api_url: raw.api_url ? String(raw.api_url) : undefined,
+    };
 }
 
-export function loadCredentials(): Credentials | null {
-  const p = credentialsPath();
-  if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf8")) as Credentials;
+export function saveStoredCredentials(
+    creds: Omit<StoredCredentials, "registered_at"> & { registered_at?: string },
+    endpoints: GateEndpoints = resolveEndpoints()
+): string {
+    const dir = gateConfigDir();
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const payload: StoredCredentials = {
+        org_id: creds.org_id,
+        token: creds.token,
+        registered_at: creds.registered_at ?? new Date().toISOString(),
+        portal_url: endpoints.portalUrl,
+        api_url: endpoints.apiUrl,
+    };
+    const { credentialsFile } = gateConfigPaths();
+    fs.writeFileSync(credentialsFile, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
+    return credentialsFile;
 }
 
-export function saveCredentials(creds: Credentials): void {
-  const p = credentialsPath();
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(creds, null, 2) + "\n", { mode: 0o600 });
-}
-
-export function resolveAuth(): { org_id: string; api_key: string; api_url: string } {
-  const file = loadCredentials();
-  const org_id = process.env.PDE_ORG_ID || file?.org_id;
-  const api_key =
-    process.env.PDE_API_KEY || process.env.PDE_ORG_TOKEN || file?.api_key;
-  const api_url =
-    process.env.PDE_API_URL || file?.api_url || "http://127.0.0.1:3847";
-  if (!org_id || !api_key) {
-    throw new Error(
-      "Missing org credentials. Run `pde-gate register` or set PDE_ORG_ID + PDE_API_KEY."
-    );
-  }
-  return { org_id, api_key, api_url };
+export function resolveAuthFromEnv(): { orgId: string; token: string } | null {
+    const token = process.env.PDE_ORG_TOKEN?.trim();
+    const orgId = process.env.PDE_ORG_ID?.trim();
+    if (!token || !orgId) {
+        return null;
+    }
+    return { orgId, token };
 }
