@@ -7,10 +7,18 @@ Local portal + API for capstone demo. Production would use Postgres + hosted UI 
 | Endpoint | Purpose |
 | -------- | ------- |
 | `GET /register` | Browser registration form |
-| `GET /settings` | Update regions / policy profile (token required) |
+| `GET /settings` | Update regions and profile or custom policy selection (token required) |
 | `POST /v1/orgs/register` | Create org → returns `org_id` + `token` |
 | `GET /v1/orgs/:orgId/config` | **Validate token** → return full org config JSON |
-| `PATCH /v1/orgs/:orgId/config` | **Validate token** → update regions / profile |
+| `PATCH /v1/orgs/:orgId/config` | **Validate token** → update regions / profile / enabled policies |
+
+For a custom profile, the portal stores `enabled_policies` as a resource-type map. For example:
+
+```json
+{
+  "google_vpc_access_connector": ["region", "network"]
+}
+```
 
 Org data stored in `data/orgs.json` (demo DB).
 

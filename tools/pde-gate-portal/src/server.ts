@@ -32,6 +32,30 @@ function parseRegions(raw: unknown): string[] {
     return [];
 }
 
+function parseEnabledPolicies(raw: unknown): Record<string, string[]> | undefined {
+    if (raw === undefined) return undefined;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error("enabled_policies must be an object keyed by Terraform resource type");
+    }
+
+    const parsed: Record<string, string[]> = {};
+    for (const [resourceType, policies] of Object.entries(raw as Record<string, unknown>)) {
+        if (!/^google_[a-z0-9_]+$/.test(resourceType)) {
+            throw new Error(`Invalid GCP resource type: ${resourceType}`);
+        }
+        if (!Array.isArray(policies) || policies.length === 0) {
+            throw new Error(`enabled_policies.${resourceType} must be a non-empty array`);
+        }
+
+        const names = [...new Set(policies.map(String).map((name) => name.trim()).filter(Boolean))];
+        if (names.length === 0 || names.some((name) => !/^[a-z0-9_]+$/.test(name))) {
+            throw new Error(`enabled_policies.${resourceType} contains an invalid policy name`);
+        }
+        parsed[resourceType] = names;
+    }
+    return parsed;
+}
+
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "pde-gate-portal" });
 });
@@ -56,13 +80,22 @@ app.post("/v1/orgs/register", (req, res) => {
         return;
     }
 
+    let enabledPolicies: Record<string, string[]> | undefined;
+    try {
+        enabledPolicies = parseEnabledPolicies(body.enabled_policies);
+    } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Invalid enabled_policies" });
+        return;
+    }
+
+    const policyProfile = body.enabled_policies !== undefined ? "custom" : (body.policy_profile ?? "full");
     const org = createOrg({
         org_name: body.org_name,
         contact_email: body.contact_email,
         approved_regions,
         approved_zones: parseRegions(body.approved_zones),
-        policy_profile: body.policy_profile ?? "full",
-        enabled_policies: body.enabled_policies,
+        policy_profile: policyProfile,
+        enabled_policies: enabledPolicies,
     });
 
     res.status(201).json({
@@ -118,11 +151,22 @@ app.patch("/v1/orgs/:orgId/config", (req, res) => {
     const approved_zones =
         body.approved_zones !== undefined ? parseRegions(body.approved_zones) : undefined;
 
+    let enabledPolicies: Record<string, string[]> | undefined;
+    try {
+        enabledPolicies = parseEnabledPolicies(body.enabled_policies);
+        if (body.enabled_policies === undefined && body.policy_profile && body.policy_profile !== "custom") {
+            enabledPolicies = {};
+        }
+    } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Invalid enabled_policies" });
+        return;
+    }
+
     const org = updateOrg(req.params.orgId ?? "", token, {
         approved_regions,
         approved_zones,
-        policy_profile: body.policy_profile,
-        enabled_policies: body.enabled_policies,
+        policy_profile: body.enabled_policies !== undefined ? "custom" : body.policy_profile,
+        enabled_policies: enabledPolicies,
     });
 
     if (!org) {

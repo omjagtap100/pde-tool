@@ -7,7 +7,7 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 520px; margin: 2rem auto; padding: 0 1rem; }
     label { display: block; margin-top: 1rem; font-weight: 600; }
-    input, select { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
+    input, select, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
     button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; background: #1a56db; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
     .result { margin-top: 2rem; padding: 1rem; background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; display: none; }
     .error { background: #fef2f2; border-color: #fca5a5; }
@@ -41,9 +41,16 @@
     <select id="policy_profile" name="policy_profile">
       <option value="full">full</option>
       <option value="baseline">baseline</option>
+      <option value="custom">custom</option>
     </select>
 
-    <button type="submit">Load current settings</button>
+    <div id="custom_policies" style="display:none">
+      <label for="enabled_policies">Enabled policies</label>
+      <textarea id="enabled_policies" name="enabled_policies" rows="5" placeholder="google_vpc_access_connector: region, network"></textarea>
+      <p class="muted">Enter one Terraform resource type per line, followed by policy filenames without <code>.rego</code>.</p>
+    </div>
+
+    <button type="submit" formnovalidate>Load current settings</button>
     <button type="button" id="save_btn" style="margin-left: 0.5rem; display:none;">Save changes</button>
   </form>
 
@@ -54,6 +61,14 @@
     const saveBtn = document.getElementById("save_btn");
     const result = document.getElementById("result");
     let loaded = false;
+    const profile = document.getElementById("policy_profile");
+    const customPolicies = document.getElementById("custom_policies");
+
+    function toggleCustomPolicies() {
+      customPolicies.style.display = profile.value === "custom" ? "block" : "none";
+    }
+
+    profile.addEventListener("change", toggleCustomPolicies);
 
     function authHeaders(orgId, token) {
       return {
@@ -66,6 +81,26 @@
       return String(raw).split(",").map(s => s.trim()).filter(Boolean);
     }
 
+    function parseEnabledPolicies(raw) {
+      const output = {};
+      for (const line of String(raw).split("\n").map(s => s.trim()).filter(Boolean)) {
+        const separator = line.indexOf(":");
+        if (separator < 1) throw new Error("Each custom policy line must use resource_type: policy1, policy2");
+        const resourceType = line.slice(0, separator).trim();
+        const policies = line.slice(separator + 1).split(",").map(s => s.trim()).filter(Boolean);
+        if (!policies.length) throw new Error("Add at least one policy for " + resourceType);
+        output[resourceType] = policies;
+      }
+      if (!Object.keys(output).length) throw new Error("Add at least one custom policy selection");
+      return output;
+    }
+
+    function formatEnabledPolicies(enabled) {
+      return Object.entries(enabled || {}).map(([resourceType, policies]) =>
+        resourceType + ": " + policies.join(", ")
+      ).join("\n");
+    }
+
     async function loadConfig(orgId, token) {
       const res = await fetch("/v1/orgs/" + encodeURIComponent(orgId) + "/config", {
         headers: authHeaders(orgId, token),
@@ -75,6 +110,8 @@
       document.getElementById("approved_regions").value = (data.approved_regions || []).join(", ");
       document.getElementById("approved_zones").value = (data.approved_zones || []).join(", ");
       document.getElementById("policy_profile").value = data.policy_profile || "baseline";
+      document.getElementById("enabled_policies").value = formatEnabledPolicies(data.enabled_policies);
+      toggleCustomPolicies();
       loaded = true;
       saveBtn.style.display = "inline-block";
       result.className = "result";
@@ -106,6 +143,9 @@
         policy_profile: document.getElementById("policy_profile").value,
       };
       try {
+        if (body.policy_profile === "custom") {
+          body.enabled_policies = parseEnabledPolicies(document.getElementById("enabled_policies").value);
+        }
         const res = await fetch("/v1/orgs/" + encodeURIComponent(orgId) + "/config", {
           method: "PATCH",
           headers: authHeaders(orgId, token),

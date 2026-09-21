@@ -42,7 +42,14 @@
     <select id="policy_profile" name="policy_profile">
       <option value="full">full — all policies per resource</option>
       <option value="baseline" selected>baseline — subset (see policy-profiles.json)</option>
+      <option value="custom">custom — select policies by resource type</option>
     </select>
+
+    <div id="custom_policies" style="display:none">
+      <label for="enabled_policies">Enabled policies</label>
+      <textarea id="enabled_policies" name="enabled_policies" rows="5" placeholder="google_vpc_access_connector: region, network"></textarea>
+      <p class="muted">Enter one Terraform resource type per line, followed by the policy filenames without <code>.rego</code>.</p>
+    </div>
 
     <button type="submit">Register organisation</button>
   </form>
@@ -71,6 +78,44 @@
 
     const form = document.getElementById("form");
     const result = document.getElementById("result");
+    const profile = document.getElementById("policy_profile");
+    const customPolicies = document.getElementById("custom_policies");
+
+    profile.addEventListener("change", () => {
+      customPolicies.style.display = profile.value === "custom" ? "block" : "none";
+    });
+
+    function parseEnabledPolicies(raw) {
+      const output = {};
+      for (const line of String(raw).split("\n").map(s => s.trim()).filter(Boolean)) {
+        const separator = line.indexOf(":");
+        if (separator < 1) throw new Error("Each custom policy line must use resource_type: policy1, policy2");
+        const resourceType = line.slice(0, separator).trim();
+        const policies = line.slice(separator + 1).split(",").map(s => s.trim()).filter(Boolean);
+        if (!policies.length) throw new Error("Add at least one policy for " + resourceType);
+        output[resourceType] = policies;
+      }
+      if (!Object.keys(output).length) throw new Error("Add at least one custom policy selection");
+      return output;
+    }
+
+    function showError(message) {
+      result.className = "result error";
+      result.innerHTML = "<h2>Registration failed</h2><p id=\"error_message\"></p>";
+      document.getElementById("error_message").textContent = message;
+      result.style.display = "block";
+    }
+
+    function buildSuccessPanel() {
+      result.className = "result";
+      result.innerHTML = `
+        <h2>Registration successful</h2>
+        <p id="callback_msg" class="muted" style="display:none">Credentials sent to pde-gate CLI. You can close this tab.</p>
+        <p><strong>org_id:</strong><br /><code id="out_org_id"></code></p>
+        <p><strong>API token</strong> (save as <code>PDE_ORG_TOKEN</code> in CI — shown once):<br /><code id="out_token"></code></p>
+        <p>Next in CI:</p>
+        <pre id="out_ci"></pre>`;
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -78,13 +123,23 @@
       result.classList.remove("error");
 
       const fd = new FormData(form);
+      const selectedProfile = fd.get("policy_profile");
       const body = {
         org_name: fd.get("org_name"),
         contact_email: fd.get("contact_email"),
         approved_regions: String(fd.get("approved_regions")).split(",").map(s => s.trim()).filter(Boolean),
         approved_zones: String(fd.get("approved_zones")).split(",").map(s => s.trim()).filter(Boolean),
-        policy_profile: fd.get("policy_profile"),
+        policy_profile: selectedProfile,
       };
+
+      if (selectedProfile === "custom") {
+        try {
+          body.enabled_policies = parseEnabledPolicies(fd.get("enabled_policies"));
+        } catch (err) {
+          showError(err.message);
+          return;
+        }
+      }
 
       try {
         const res = await fetch("/v1/orgs/register", {
@@ -96,6 +151,8 @@
         if (!res.ok) {
           throw new Error(data.error || res.statusText);
         }
+
+        buildSuccessPanel();
 
         if (callbackUrl && isLocalCallback(callbackUrl)) {
           try {
@@ -119,9 +176,7 @@
         result.style.display = "block";
         form.style.display = "none";
       } catch (err) {
-        result.classList.add("error");
-        result.innerHTML = "<h2>Registration failed</h2><p>" + err.message + "</p>";
-        result.style.display = "block";
+        showError(err.message);
       }
     });
   </script>

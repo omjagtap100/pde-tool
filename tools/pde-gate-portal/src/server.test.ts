@@ -97,4 +97,82 @@ describe("portal API", () => {
         assert.deepEqual(updated.approved_regions, ["australia-southeast1", "australia-southeast2"]);
         assert.equal(updated.policy_profile, "full");
     });
+
+    it("registers and returns a custom policy selection", async () => {
+        const reg = await fetch(`${baseUrl}/v1/orgs/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                org_name: "Custom Policy Org",
+                contact_email: "security@example.com",
+                approved_regions: ["australia-southeast1"],
+                policy_profile: "custom",
+                enabled_policies: {
+                    google_vpc_access_connector: ["region", "network", "region"],
+                },
+            }),
+        });
+        assert.equal(reg.status, 201);
+        const { org_id, token } = (await reg.json()) as { org_id: string; token: string };
+
+        const configRes = await fetch(`${baseUrl}/v1/orgs/${org_id}/config`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        assert.equal(configRes.status, 200);
+        const config = (await configRes.json()) as {
+            policy_profile: string;
+            enabled_policies: Record<string, string[]>;
+        };
+        assert.equal(config.policy_profile, "custom");
+        assert.deepEqual(config.enabled_policies, {
+            google_vpc_access_connector: ["region", "network"],
+        });
+    });
+
+    it("rejects malformed custom policy selections", async () => {
+        const res = await fetch(`${baseUrl}/v1/orgs/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                org_name: "Invalid Policy Org",
+                contact_email: "security@example.com",
+                approved_regions: ["australia-southeast1"],
+                policy_profile: "custom",
+                enabled_policies: { "../unsafe": ["region"] },
+            }),
+        });
+        assert.equal(res.status, 400);
+        const body = (await res.json()) as { error: string };
+        assert.match(body.error, /Invalid GCP resource type/);
+    });
+
+    it("clears a custom selection when changing to a named profile", async () => {
+        const reg = await fetch(`${baseUrl}/v1/orgs/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                org_name: "Profile Switch Org",
+                contact_email: "security@example.com",
+                approved_regions: ["australia-southeast1"],
+                enabled_policies: { google_vpc_access_connector: ["region"] },
+            }),
+        });
+        const { org_id, token } = (await reg.json()) as { org_id: string; token: string };
+
+        const patch = await fetch(`${baseUrl}/v1/orgs/${org_id}/config`, {
+            method: "PATCH",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ policy_profile: "baseline" }),
+        });
+        assert.equal(patch.status, 200);
+        const config = (await patch.json()) as {
+            policy_profile: string;
+            enabled_policies: Record<string, string[]>;
+        };
+        assert.equal(config.policy_profile, "baseline");
+        assert.deepEqual(config.enabled_policies, {});
+    });
 });
