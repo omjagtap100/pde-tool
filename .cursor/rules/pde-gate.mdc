@@ -1,0 +1,12 @@
+---
+description: PDE Gate project rules and constraints
+globs: *
+---
+# PDE Gate Constraints
+- Thin CLI (`tools/pde-gate`).
+- Hosted API (`tools/pde-gate-api`).
+- Rego and OPA run server-side only.
+- Organizations never receive the internal `policies/` tree.
+- Packages (`--package`) are the client-facing unit.
+- Region whitelists via `variables.approved_regions` / `approved_zones`.
+- Node 24 runtime.
