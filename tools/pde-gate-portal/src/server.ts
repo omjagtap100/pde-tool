@@ -10,7 +10,6 @@ export function createApp() {
   app.use(express.json({ limit: "32mb" }));
   app.use(express.static(publicDir));
 
-  // Portal web page routes
   app.get("/", (_req, res) => {
     res.redirect("/register");
   });
@@ -27,7 +26,6 @@ export function createApp() {
     res.json({ status: "ok", service: "pde-gate-portal", api_url: API_URL });
   });
 
-  // Proxy / forward API requests to pde-gate-api backend
   app.all("/v1/*", async (req, res) => {
     try {
       const targetUrl = `${API_URL.replace(/\/$/, "")}${req.originalUrl}`;

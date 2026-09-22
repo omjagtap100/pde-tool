@@ -13,6 +13,7 @@ import {
 } from './store.js';
 import { runServerCheck } from './engine/run-check.js';
 import type { CreatePackageRequest, RegisterRequest } from './types.js';
+
 const publicDirectory = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
@@ -25,7 +26,6 @@ function parseBearer(header: string | undefined): string | null {
     return token || null;
 }
 
-/** Express params are typed as string | string[]; normalize to a single string. */
 function param(value: string | string[] | undefined): string {
     if (Array.isArray(value)) return value[0] ?? '';
     return value ?? '';
@@ -51,21 +51,21 @@ async function requireOrg(
 
 export function createApp() {
     const app = express();
-    // Plans can be large — client uploads terraform show -json
     app.use(express.json({ limit: process.env.PDE_JSON_LIMIT || '32mb' }));
     app.use(express.static(publicDirectory));
 
     app.get('/', (_req, res) => {
-    res.redirect('/register');
-});
+        res.redirect('/register');
+    });
 
-app.get('/register', (_req, res) => {
-    res.sendFile(path.join(publicDirectory, 'register.html'));
-});
+    app.get('/register', (_req, res) => {
+        res.sendFile(path.join(publicDirectory, 'register.html'));
+    });
 
-app.get('/settings', (_req, res) => {
-    res.sendFile(path.join(publicDirectory, 'settings.html'));
-});
+    app.get('/settings', (_req, res) => {
+        res.sendFile(path.join(publicDirectory, 'settings.html'));
+    });
+
     app.get('/health', (_req, res) => {
         res.json({ status: 'ok', service: 'pde-gate-api' });
     });
@@ -197,11 +197,6 @@ app.get('/settings', (_req, res) => {
         res.status(204).end();
     });
 
-    /**
-     * Server-side policy check.
-     * Client sends plan JSON + package_id; API loads Rego from PDE policies/ and runs OPA.
-     * Package variables.approved_regions / approved_zones drive region/zone whitelists.
-     */
     app.post('/v1/orgs/:orgId/checks', async (req, res) => {
         const auth = await requireOrg(req, res);
         if (!auth) return;

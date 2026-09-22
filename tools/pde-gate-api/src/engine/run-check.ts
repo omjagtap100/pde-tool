@@ -25,7 +25,6 @@ export type ServerCheckResult = {
   org_config: Record<string, unknown>;
 };
 
-/** PDE policies/ tree — override with PDE_POLICIES_ROOT in prod. */
 export function policiesRoot(): string {
   if (process.env.PDE_POLICIES_ROOT) {
     return path.resolve(process.env.PDE_POLICIES_ROOT);
@@ -34,11 +33,6 @@ export function policiesRoot(): string {
   return path.resolve(here, "../../../../policies");
 }
 
-/**
- * Server-side check: plan from client + package from DB + Rego from PDE repo.
- * Package variables.approved_regions / approved_zones become input.org_config
- * so whitelist policies use the client's chosen regions (not hardcoded only).
- */
 export async function runServerCheck(input: ServerCheckInput): Promise<ServerCheckResult> {
   const pkg = await getPackage(input.orgId, input.packageId);
   if (!pkg) {
@@ -62,7 +56,6 @@ export async function runServerCheck(input: ServerCheckInput): Promise<ServerChe
   }
 
   const adapter = getAdapter(platform);
-  // Fully enforce TF + format + Google provider on hosted checks (opt out: strict_versions: false).
   const strict = input.strictVersions !== false;
   const googleFromPkg =
     typeof pkg.variables?.google_provider_version === "string"
@@ -81,7 +74,6 @@ export async function runServerCheck(input: ServerCheckInput): Promise<ServerChe
     throw e;
   }
 
-  // Client region whitelist (and zones) from package.variables → OPA input.org_config
   const withOrg = adapter.mergeOrgConfig(canonical, pkg.variables);
   const org_config = (withOrg.org_config ?? {}) as Record<string, unknown>;
 

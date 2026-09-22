@@ -47,7 +47,6 @@ export async function opaEvalMessage(
 
 export function isPolicyFailure(message: unknown): boolean {
     const text = JSON.stringify(message ?? '');
-    // Match "Non-Compliant Resources: <something>" that is not the all-passed marker.
     const re = /Non-Compliant Resources:\s*([^"]*)/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {

@@ -1,5 +1,3 @@
-/** Shared plugin contracts — GCP implemented; AWS/Azure stubs for vision. */
-
 export type PlatformId = "gcp" | "aws" | "azure";
 
 export type PlanResource = {
@@ -17,7 +15,6 @@ export type CanonicalPlan = {
       resources: PlanResource[];
     };
   };
-  /** Merged for OPA: approved_regions / approved_zones etc. */
   org_config?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -34,7 +31,6 @@ export type PlatformAdapter = {
   id: PlatformId;
   detect(plan: Record<string, unknown>): boolean;
   listResourceTypes(plan: CanonicalPlan): string[];
-  /** Absolute or repo-relative policies root for this cloud, e.g. policies/gcp */
   policiesSubdir(): string;
   mergeOrgConfig(
     plan: CanonicalPlan,
@@ -54,9 +50,5 @@ export type CanonicalizeOpts = {
 
 export type Canonicalizer = {
   id: PlatformId;
-  /**
-   * Version gate + flatten. Full registry packs drop in later under
-   * plugins/<platform>/registry/ without changing this interface.
-   */
   canonicalize(plan: Record<string, unknown>, opts?: CanonicalizeOpts): CanonicalizeResult;
 };

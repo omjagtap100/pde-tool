@@ -7,7 +7,6 @@ export type PolicyTarget = {
   policyFiles: string[];
 };
 
-/** Discover policy dirs under policies/<platform>/... that match resource types in the plan. */
 export function discoverPolicies(
   policiesRoot: string,
   platformSubdir: string,
@@ -30,7 +29,6 @@ export function discoverPolicies(
       }
       if (ent.name !== "_vars.rego") continue;
       const text = fs.readFileSync(full, "utf8");
-      // PDE _vars use variables.resource_type; some older files use resource_type :=
       const m =
         text.match(/"resource_type"\s*:\s*"([^"]+)"/) ||
         text.match(/resource_type\s*:=\s*"([^"]+)"/);
@@ -59,7 +57,6 @@ export function discoverPolicies(
   return targets;
 }
 
-/** Rego package name from file content (first `package ...` line). */
 export function readRegoPackage(file: string): string {
   const text = fs.readFileSync(file, "utf8");
   const m = text.match(/^package\s+([^\s]+)/m);
