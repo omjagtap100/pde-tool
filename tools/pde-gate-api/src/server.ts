@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import {
     createOrg,
@@ -11,6 +13,11 @@ import {
 } from './store.js';
 import { runServerCheck } from './engine/run-check.js';
 import type { CreatePackageRequest, RegisterRequest } from './types.js';
+const publicDirectory = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'public'
+);
 
 function parseBearer(header: string | undefined): string | null {
     if (!header?.startsWith('Bearer ')) return null;
@@ -46,7 +53,19 @@ export function createApp() {
     const app = express();
     // Plans can be large — client uploads terraform show -json
     app.use(express.json({ limit: process.env.PDE_JSON_LIMIT || '32mb' }));
+    app.use(express.static(publicDirectory));
 
+    app.get('/', (_req, res) => {
+    res.redirect('/register');
+});
+
+app.get('/register', (_req, res) => {
+    res.sendFile(path.join(publicDirectory, 'register.html'));
+});
+
+app.get('/settings', (_req, res) => {
+    res.sendFile(path.join(publicDirectory, 'settings.html'));
+});
     app.get('/health', (_req, res) => {
         res.json({ status: 'ok', service: 'pde-gate-api' });
     });

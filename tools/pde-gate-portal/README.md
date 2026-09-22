@@ -1,85 +1,42 @@
-# pde-gate-portal — Minimal Portal API (Step 2)
+# PDE Gate Web Portal (`tools/pde-gate-portal`)
 
-Local portal + API for capstone demo. Production would use Postgres + hosted UI — **same API contract**.
+Web Portal frontend for PDE Gate organisation registration and policy package settings.
 
-## What it does
+---
 
-| Endpoint | Purpose |
-| -------- | ------- |
-| `GET /register` | Browser registration form |
-| `GET /settings` | Update regions and profile or custom policy selection (token required) |
-| `POST /v1/orgs/register` | Create org → returns `org_id` + `token` |
-| `GET /v1/orgs/:orgId/config` | **Validate token** → return full org config JSON |
-| `PATCH /v1/orgs/:orgId/config` | **Validate token** → update regions / profile / enabled policies |
+## How It Works
 
-For a custom profile, the portal stores `enabled_policies` as a resource-type map. For example:
+- Serves the browser web interface (`/register`, `/settings`, `/styles.css`).
+- Connects to the backend API (`tools/pde-gate-api`) at `PDE_API_URL` (default: `http://127.0.0.1:3847`).
+- Allows users to visually register organisations, select policy profiles (Full, Baseline, Custom), configure approved regions, and view CI export variables.
 
-```json
-{
-  "google_vpc_access_connector": ["region", "network"]
-}
-```
+---
 
-Org data stored in `data/orgs.json` (demo DB).
+## Quick Start
 
-## Quick start
-
-**Terminal 1 — start portal:**
-
+### 1. Make sure the backend API is running:
 ```bash
-cd tools/pde-gate-portal
-npm install
+cd tools/pde-gate-api
 npm start
 ```
+*(Runs on port 3847)*
 
-**Terminal 2 — register (production CLI flow):**
-
+### 2. Start the Web Portal:
 ```bash
-cd tools/pde-gate
-export PDE_API_URL=http://localhost:3847
-export PDE_PORTAL_URL=http://localhost:3847
-npm run register:portal
+cd tools/pde-gate-portal
+npm start
 ```
+*(Runs on port 3848)*
 
-Browser opens → configure regions → credentials saved automatically to `~/.pde-gate/credentials.json`.
+### 3. Open in Browser:
+- **Registration**: [http://127.0.0.1:3848/register](http://127.0.0.1:3848/register)
+- **Settings**: [http://127.0.0.1:3848/settings](http://127.0.0.1:3848/settings)
 
-Or open http://localhost:3847/register manually and copy token for CI.
+---
 
-**Terminal 3 — verify + run check:**
+## Environment Variables
 
-```bash
-cd tools/pde-gate
-export PDE_API_URL=http://localhost:3847
-export PDE_PORTAL_URL=http://localhost:3847
-
-npm run status
-
-npx tsx src/cli.ts check \
-  --plan ../../samples/org-input/plan.json \
-  --policies ../../policies
-```
-
-With credentials saved locally, `--org-id` is optional. For CI, set `PDE_ORG_ID` + `PDE_ORG_TOKEN` instead.
-
-pde-gate **inside the package** calls `GET /v1/orgs/:id/config` with the token. API validates → returns regions + `policy_profile` → policies run.
-
-## Flow
-
-```text
-Browser /register  →  POST /v1/orgs/register  →  data/orgs.json
-CI pde-gate check  →  GET /v1/orgs/:id/config  →  token validated  →  org config
-```
-
-## Tests
-
-```bash
-npm test
-```
-
-## Environment
-
-| Variable | Default |
-| -------- | ------- |
-| `PDE_PORTAL_PORT` | `3847` |
-
-Point pde-gate with `PDE_API_URL` and `PDE_PORTAL_URL` (see above).
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `PDE_PORTAL_PORT` | `3848` | Port where the portal server runs |
+| `PDE_API_URL` | `http://127.0.0.1:3847` | Target URL of the backend `pde-gate-api` server |
