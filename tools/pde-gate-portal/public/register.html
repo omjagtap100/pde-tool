@@ -3,20 +3,84 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <title>PDE Gate — Register Organisation</title>
+
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 2rem auto; padding: 0 1rem; }
-    label { display: block; margin-top: 1rem; font-weight: 600; }
-    input, select, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
-    button { margin-top: 1.5rem; padding: 0.6rem 1.2rem; background: #1a56db; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-    .result { margin-top: 2rem; padding: 1rem; background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; display: none; }
-    .error { background: #fef2f2; border-color: #fca5a5; }
-    code { word-break: break-all; }
-    .muted { color: #4b5563; font-size: 0.95rem; }
-    nav a { margin-right: 1rem; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 520px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.25rem;
+      box-sizing: border-box;
+    }
+
+    button {
+      margin-top: 1.5rem;
+      padding: 0.6rem 1.2rem;
+      background: #1a56db;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .result {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .error {
+      background: #fef2f2;
+      border-color: #fca5a5;
+    }
+
+    code {
+      word-break: break-all;
+    }
+
+    pre {
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .muted {
+      color: #4b5563;
+      font-size: 0.95rem;
+    }
+
+    nav a {
+      margin-right: 1rem;
+    }
   </style>
+
   <link rel="stylesheet" href="/styles.css" />
 </head>
+
 <body>
   <nav>
     <a href="/register">Register</a>
@@ -24,160 +88,445 @@
   </nav>
 
   <h1>PDE Gate — Register</h1>
-  <p>Configure your organisation here. Regions and policy choices are stored on the portal — CI only needs the API token.</p>
+
+  <p>
+    Register your organisation and create its initial policy package.
+    The generated API key can then be stored securely in CI.
+  </p>
 
   <form id="form">
     <label for="org_name">Organisation name</label>
-    <input id="org_name" name="org_name" required />
+    <input
+      id="org_name"
+      name="org_name"
+      autocomplete="organization"
+      required
+    />
 
     <label for="contact_email">Contact email</label>
-    <input id="contact_email" name="contact_email" type="email" required />
+    <input
+      id="contact_email"
+      name="contact_email"
+      type="email"
+      autocomplete="email"
+      required
+    />
 
-    <label for="approved_regions">Approved regions (comma-separated)</label>
-    <input id="approved_regions" name="approved_regions" value="australia-southeast1, australia-southeast2" required />
+    <label for="password">Password</label>
+    <input
+      id="password"
+      name="password"
+      type="password"
+      minlength="8"
+      autocomplete="new-password"
+      required
+    />
 
-    <label for="approved_zones">Approved zones (comma-separated, optional)</label>
-    <input id="approved_zones" name="approved_zones" value="australia-southeast1-a" />
+    <p class="muted">
+      Use at least eight characters. This password can be used for
+      organisation login.
+    </p>
+
+    <label for="approved_regions">
+      Approved regions (comma-separated)
+    </label>
+
+    <input
+      id="approved_regions"
+      name="approved_regions"
+      value="australia-southeast1, australia-southeast2"
+      required
+    />
+
+    <label for="approved_zones">
+      Approved zones (comma-separated, optional)
+    </label>
+
+    <input
+      id="approved_zones"
+      name="approved_zones"
+      value="australia-southeast1-a"
+    />
 
     <label for="policy_profile">Policy profile</label>
+
     <select id="policy_profile" name="policy_profile">
-      <option value="full">full — all policies per resource</option>
-      <option value="baseline" selected>baseline — subset (see policy-profiles.json)</option>
-      <option value="custom">custom — select policies by resource type</option>
+      <option value="full">
+        full — all policies per resource
+      </option>
+
+      <option value="baseline" selected>
+        baseline — standard policy subset
+      </option>
+
+      <option value="custom">
+        custom — select policies by resource type
+      </option>
     </select>
 
-    <div id="custom_policies" style="display:none">
+    <div id="custom_policies" style="display: none">
       <label for="enabled_policies">Enabled policies</label>
-      <textarea id="enabled_policies" name="enabled_policies" rows="5" placeholder="google_vpc_access_connector: region, network"></textarea>
-      <p class="muted">Enter one Terraform resource type per line, followed by the policy filenames without <code>.rego</code>.</p>
+
+      <textarea
+        id="enabled_policies"
+        name="enabled_policies"
+        rows="5"
+        placeholder="google_vpc_access_connector: region, network"
+      ></textarea>
+
+      <p class="muted">
+        Enter one Terraform resource type per line, followed by the
+        policy filenames without <code>.rego</code>.
+      </p>
     </div>
 
-    <button type="submit">Register organisation</button>
+    <button id="submit_button" type="submit">
+      Register organisation
+    </button>
   </form>
 
-  <div id="result" class="result">
-    <h2>Registration successful</h2>
-    <p id="callback_msg" class="muted" style="display:none">Credentials sent to pde-gate CLI. You can close this tab.</p>
-    <p><strong>org_id:</strong><br /><code id="out_org_id"></code></p>
-    <p><strong>API token</strong> (save as <code>PDE_ORG_TOKEN</code> in CI — shown once):<br /><code id="out_token"></code></p>
-    <p>Next in CI:</p>
-    <pre id="out_ci"></pre>
-  </div>
+  <div id="result" class="result" aria-live="polite"></div>
 
   <script>
     const params = new URLSearchParams(location.search);
     const callbackUrl = params.get("callback");
 
+    const form = document.getElementById("form");
+    const result = document.getElementById("result");
+    const profile = document.getElementById("policy_profile");
+    const customPolicies = document.getElementById("custom_policies");
+    const submitButton = document.getElementById("submit_button");
+
     function isLocalCallback(url) {
       try {
-        const u = new URL(url);
-        return u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "::1");
+        const parsedUrl = new URL(url);
+
+        return (
+          parsedUrl.protocol === "http:" &&
+          (
+            parsedUrl.hostname === "127.0.0.1" ||
+            parsedUrl.hostname === "localhost" ||
+            parsedUrl.hostname === "::1"
+          )
+        );
       } catch {
         return false;
       }
     }
 
-    const form = document.getElementById("form");
-    const result = document.getElementById("result");
-    const profile = document.getElementById("policy_profile");
-    const customPolicies = document.getElementById("custom_policies");
-
     profile.addEventListener("change", () => {
-      customPolicies.style.display = profile.value === "custom" ? "block" : "none";
+      customPolicies.style.display =
+        profile.value === "custom" ? "block" : "none";
     });
+
+    function parseCommaSeparated(raw) {
+      return String(raw)
+        .split(",")
+        .map(value => value.trim())
+        .filter(Boolean);
+    }
 
     function parseEnabledPolicies(raw) {
       const output = {};
-      for (const line of String(raw).split("\n").map(s => s.trim()).filter(Boolean)) {
+
+      const lines = String(raw)
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
         const separator = line.indexOf(":");
-        if (separator < 1) throw new Error("Each custom policy line must use resource_type: policy1, policy2");
+
+        if (separator < 1) {
+          throw new Error(
+            "Each custom policy line must use: resource_type: policy1, policy2"
+          );
+        }
+
         const resourceType = line.slice(0, separator).trim();
-        const policies = line.slice(separator + 1).split(",").map(s => s.trim()).filter(Boolean);
-        if (!policies.length) throw new Error("Add at least one policy for " + resourceType);
+
+        const policies = line
+          .slice(separator + 1)
+          .split(",")
+          .map(policy => policy.trim())
+          .filter(Boolean);
+
+        if (!policies.length) {
+          throw new Error(
+            "Add at least one policy for " + resourceType
+          );
+        }
+
         output[resourceType] = policies;
       }
-      if (!Object.keys(output).length) throw new Error("Add at least one custom policy selection");
+
+      if (!Object.keys(output).length) {
+        throw new Error(
+          "Add at least one custom policy selection"
+        );
+      }
+
       return output;
+    }
+
+    async function readJson(response) {
+      try {
+        return await response.json();
+      } catch {
+        return {};
+      }
     }
 
     function showError(message) {
       result.className = "result error";
-      result.innerHTML = "<h2>Registration failed</h2><p id=\"error_message\"></p>";
-      document.getElementById("error_message").textContent = message;
+      result.innerHTML = "";
+
+      const heading = document.createElement("h2");
+      heading.textContent = "Registration failed";
+
+      const paragraph = document.createElement("p");
+      paragraph.textContent = message;
+
+      result.appendChild(heading);
+      result.appendChild(paragraph);
       result.style.display = "block";
     }
 
-    function buildSuccessPanel() {
+    function showSuccess(orgId, apiKey, packageName) {
       result.className = "result";
       result.innerHTML = `
         <h2>Registration successful</h2>
-        <p id="callback_msg" class="muted" style="display:none">Credentials sent to pde-gate CLI. You can close this tab.</p>
-        <p><strong>org_id:</strong><br /><code id="out_org_id"></code></p>
-        <p><strong>API token</strong> (save as <code>PDE_ORG_TOKEN</code> in CI — shown once):<br /><code id="out_token"></code></p>
-        <p>Next in CI:</p>
-        <pre id="out_ci"></pre>`;
+
+        <p
+          id="callback_msg"
+          class="muted"
+          style="display: none"
+        >
+          Credentials were sent to the PDE Gate CLI.
+          You can close this tab.
+        </p>
+
+        <p>
+          <strong>Organisation ID:</strong><br />
+          <code id="out_org_id"></code>
+        </p>
+
+        <p>
+          <strong>API key</strong>
+          (save as <code>PDE_API_KEY</code> in CI — shown once):
+          <br />
+          <code id="out_api_key"></code>
+        </p>
+
+        <p>
+          <strong>Policy package:</strong><br />
+          <code id="out_package"></code>
+        </p>
+
+        <p><strong>CI environment variables:</strong></p>
+        <pre id="out_ci"></pre>
+      `;
+
+      document.getElementById("out_org_id").textContent = orgId;
+      document.getElementById("out_api_key").textContent = apiKey;
+      document.getElementById("out_package").textContent = packageName;
+
+      document.getElementById("out_ci").textContent =
+        `PDE_ORG_ID=${orgId}\n` +
+        `PDE_API_KEY=${apiKey}\n` +
+        `PDE_API_URL=${location.origin}`;
+
+      result.style.display = "block";
     }
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      result.style.display = "none";
-      result.classList.remove("error");
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
 
-      const fd = new FormData(form);
-      const selectedProfile = fd.get("policy_profile");
-      const body = {
-        org_name: fd.get("org_name"),
-        contact_email: fd.get("contact_email"),
-        approved_regions: String(fd.get("approved_regions")).split(",").map(s => s.trim()).filter(Boolean),
-        approved_zones: String(fd.get("approved_zones")).split(",").map(s => s.trim()).filter(Boolean),
-        policy_profile: selectedProfile,
-      };
+      result.style.display = "none";
+      result.className = "result";
+
+      submitButton.disabled = true;
+      submitButton.textContent = "Registering...";
+
+      const formData = new FormData(form);
+
+      const orgName = String(
+        formData.get("org_name")
+      ).trim();
+
+      const contactEmail = String(
+        formData.get("contact_email")
+      ).trim();
+
+      const password = String(
+        formData.get("password")
+      );
+
+      const selectedProfile = String(
+        formData.get("policy_profile")
+      );
+
+      const approvedRegions = parseCommaSeparated(
+        formData.get("approved_regions")
+      );
+
+      const approvedZones = parseCommaSeparated(
+        formData.get("approved_zones")
+      );
+
+      let enabledPolicies = {};
 
       if (selectedProfile === "custom") {
         try {
-          body.enabled_policies = parseEnabledPolicies(fd.get("enabled_policies"));
-        } catch (err) {
-          showError(err.message);
+          enabledPolicies = parseEnabledPolicies(
+            formData.get("enabled_policies")
+          );
+        } catch (error) {
+          showError(
+            error instanceof Error
+              ? error.message
+              : "Invalid custom policy configuration"
+          );
+
+          submitButton.disabled = false;
+          submitButton.textContent = "Register organisation";
           return;
         }
       }
 
       try {
-        const res = await fetch("/v1/orgs/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || res.statusText);
+        /*
+         * Step 1:
+         * Register the organisation and receive its API key.
+         */
+        const registrationResponse = await fetch(
+          "/v1/orgs/register",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              org_name: orgName,
+              contact_email: contactEmail,
+              password
+            })
+          }
+        );
+
+        const registrationData =
+          await readJson(registrationResponse);
+
+        if (!registrationResponse.ok) {
+          throw new Error(
+            registrationData.error ||
+            "Organisation registration failed"
+          );
         }
 
-        buildSuccessPanel();
+        /*
+         * Step 2:
+         * Use the new API key to create the organisation's
+         * first policy package.
+         */
+        const packageName =
+          `${selectedProfile}-policy-package`;
 
-        if (callbackUrl && isLocalCallback(callbackUrl)) {
+        const policyGroups = {
+          profile: selectedProfile,
+          enabled_policies: enabledPolicies
+        };
+
+        const packageResponse = await fetch(
+          `/v1/orgs/${
+            encodeURIComponent(registrationData.org_id)
+          }/packages`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization":
+                `Bearer ${registrationData.api_key}`
+            },
+            body: JSON.stringify({
+              name: packageName,
+              description:
+                `Initial ${selectedProfile} policy configuration`,
+              platforms: ["gcp"],
+              policy_groups: policyGroups,
+              variables: {
+                approved_regions: approvedRegions,
+                approved_zones: approvedZones
+              }
+            })
+          }
+        );
+
+        const packageData =
+          await readJson(packageResponse);
+
+        if (!packageResponse.ok) {
+          throw new Error(
+            packageData.error ||
+            "Organisation was registered, but policy package creation failed"
+          );
+        }
+
+        showSuccess(
+          registrationData.org_id,
+          registrationData.api_key,
+          packageData.name || packageName
+        );
+
+        /*
+         * Optional localhost callback for future CLI integration.
+         */
+        if (
+          callbackUrl &&
+          isLocalCallback(callbackUrl)
+        ) {
           try {
-            const cb = await fetch(callbackUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ org_id: data.org_id, token: data.token }),
-            });
-            if (cb.ok) {
-              document.getElementById("callback_msg").style.display = "block";
+            const callbackResponse = await fetch(
+              callbackUrl,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  org_id: registrationData.org_id,
+                  api_key: registrationData.api_key
+                })
+              }
+            );
+
+            if (callbackResponse.ok) {
+              const callbackMessage =
+                document.getElementById("callback_msg");
+
+              if (callbackMessage) {
+                callbackMessage.style.display = "block";
+              }
             }
           } catch {
-            /* CLI callback failed — show manual copy UI */
+            /*
+             * The manual copy interface remains available if
+             * the local CLI callback cannot be contacted.
+             */
           }
         }
 
-        document.getElementById("out_org_id").textContent = data.org_id;
-        document.getElementById("out_token").textContent = data.token;
-        document.getElementById("out_ci").textContent =
-          `export PDE_ORG_ID=${data.org_id}\nexport PDE_ORG_TOKEN=${data.token}\nexport PDE_API_URL=${location.origin}\nexport PDE_PORTAL_URL=${location.origin}\npde-gate check --plan plan.json --policies policies/ --org-id ${data.org_id}`;
-        result.style.display = "block";
         form.style.display = "none";
-      } catch (err) {
-        showError(err.message);
+      } catch (error) {
+        showError(
+          error instanceof Error
+            ? error.message
+            : "Registration failed"
+        );
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent =
+          "Register organisation";
       }
     });
   </script>
