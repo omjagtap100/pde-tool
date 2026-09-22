@@ -72,6 +72,20 @@
       margin-top: 1.5rem;
     }
 
+    .import-message {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 4px;
+    }
+
+    .import-error {
+      background: #fef2f2;
+      border-color: #fca5a5;
+    }
+
     nav a {
       margin-right: 1rem;
     }
@@ -99,7 +113,6 @@
 
   <form id="credentials_form">
     <label for="org_id">Organisation ID</label>
-
     <input
       id="org_id"
       name="org_id"
@@ -108,7 +121,6 @@
     />
 
     <label for="api_key">API key</label>
-
     <input
       id="api_key"
       name="api_key"
@@ -122,23 +134,58 @@
     </button>
   </form>
 
-    <form id="package_fields" class="package-fields">
+  <form id="package_fields" class="package-fields">
     <label for="package_select">Policy package</label>
-
     <select id="package_select"></select>
 
-    <label for="package_name">Package name</label>
+    <label for="package_file">
+      Import package.json (optional)
+    </label>
+    <input
+      id="package_file"
+      name="package_file"
+      type="file"
+      accept=".json,application/json"
+    />
 
+    <p class="muted">
+      Import an existing PDE Gate package.json to populate the fields below.
+      Review the imported configuration before saving.
+    </p>
+
+    <div
+      id="import_message"
+      class="import-message"
+      aria-live="polite"
+    ></div>
+
+    <label for="package_name">Package name</label>
     <input
       id="package_name"
       name="package_name"
       required
     />
 
+    <label for="package_description">Package description</label>
+    <textarea
+      id="package_description"
+      name="package_description"
+      rows="3"
+    ></textarea>
+
+    <label for="platforms">
+      Platforms (comma-separated)
+    </label>
+    <input
+      id="platforms"
+      name="platforms"
+      value="gcp"
+      required
+    />
+
     <label for="approved_regions">
       Approved regions (comma-separated)
     </label>
-
     <input
       id="approved_regions"
       name="approved_regions"
@@ -148,21 +195,34 @@
     <label for="approved_zones">
       Approved zones (comma-separated, optional)
     </label>
-
     <input
       id="approved_zones"
       name="approved_zones"
     />
 
-    <label for="policy_profile">Policy profile</label>
+    <label for="google_provider_version">
+      Google provider version
+    </label>
+    <input
+      id="google_provider_version"
+      name="google_provider_version"
+      placeholder="7.37.0"
+    />
 
+    <label for="policy_profile">Policy profile</label>
     <select id="policy_profile" name="policy_profile">
-      <option value="full">full</option>
-      <option value="baseline">baseline</option>
-      <option value="custom">custom</option>
+      <option value="full">
+        full — all policies per resource
+      </option>
+      <option value="baseline">
+        baseline — standard policy subset
+      </option>
+      <option value="custom">
+        custom — select policies by resource type
+      </option>
     </select>
 
-    <div id="custom_policies" style="display: none">
+    <div id="custom_policies">
       <label for="enabled_policies">Enabled policies</label>
 
       <textarea
@@ -178,7 +238,7 @@
       </p>
     </div>
 
-    <button id="save_button" type="button">
+    <button id="save_button" type="submit">
       Save changes
     </button>
   </form>
@@ -189,17 +249,23 @@
     const credentialsForm =
       document.getElementById("credentials_form");
 
+    const packageForm =
+      document.getElementById("package_fields");
+
     const loadButton =
       document.getElementById("load_button");
 
     const saveButton =
       document.getElementById("save_button");
 
-    const packageFields =
-      document.getElementById("package_fields");
-
     const packageSelect =
       document.getElementById("package_select");
+
+    const packageFile =
+      document.getElementById("package_file");
+
+    const importMessage =
+      document.getElementById("import_message");
 
     const profile =
       document.getElementById("policy_profile");
@@ -212,6 +278,7 @@
 
     let loadedPackages = [];
     let loadedPackage = null;
+    let importedPolicyGroups = null;
 
     function getCredentials() {
       return {
@@ -249,6 +316,53 @@
         .filter(Boolean);
     }
 
+    function getObject(value) {
+      if (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+      ) {
+        return value;
+      }
+
+      return {};
+    }
+
+    function getPolicyGroups(policyPackage) {
+      const groups =
+        getObject(policyPackage?.policy_groups);
+
+      /*
+       * Compatibility with policy packages created by the
+       * older portal implementation.
+       */
+      const nestedEnabledPolicies =
+        getObject(groups.enabled_policies);
+
+      if (Object.keys(nestedEnabledPolicies).length) {
+        return nestedEnabledPolicies;
+      }
+
+      const directPolicyGroups = {};
+
+      for (const [resourceType, policies] of
+        Object.entries(groups)) {
+        if (
+          resourceType !== "profile" &&
+          resourceType !== "enabled_policies" &&
+          Array.isArray(policies)
+        ) {
+          directPolicyGroups[resourceType] = policies;
+        }
+      }
+
+      return directPolicyGroups;
+    }
+
+    function getVariables(policyPackage) {
+      return getObject(policyPackage?.variables);
+    }
+
     function parseEnabledPolicies(raw) {
       const output = {};
 
@@ -262,7 +376,7 @@
 
         if (separator < 1) {
           throw new Error(
-            "Each custom policy line must use: resource_type: policy1, policy2"
+            "Each policy line must use: resource_type: policy1, policy2"
           );
         }
 
@@ -276,10 +390,25 @@
             .map(policy => policy.trim())
             .filter(Boolean);
 
+        if (!resourceType) {
+          throw new Error(
+            "Each policy line requires a Terraform resource type"
+          );
+        }
+
         if (!policies.length) {
           throw new Error(
             "Add at least one policy for " + resourceType
           );
+        }
+
+        for (const policy of policies) {
+          if (policy.endsWith(".rego")) {
+            throw new Error(
+              "Enter policy names without .rego for " +
+              resourceType
+            );
+          }
         }
 
         output[resourceType] = policies;
@@ -287,22 +416,15 @@
 
       if (!Object.keys(output).length) {
         throw new Error(
-          "Add at least one custom policy selection"
+          "Add at least one enabled policy selection"
         );
       }
 
       return output;
     }
 
-    function formatEnabledPolicies(enabledPolicies) {
-      if (
-        !enabledPolicies ||
-        typeof enabledPolicies !== "object"
-      ) {
-        return "";
-      }
-
-      return Object.entries(enabledPolicies)
+    function formatEnabledPolicies(policyGroups) {
+      return Object.entries(getObject(policyGroups))
         .filter(([, policies]) => Array.isArray(policies))
         .map(([resourceType, policies]) => {
           return `${resourceType}: ${policies.join(", ")}`;
@@ -310,37 +432,9 @@
         .join("\n");
     }
 
-    function getPolicyGroups(policyPackage) {
-      const groups = policyPackage?.policy_groups;
-
-      if (
-        groups &&
-        typeof groups === "object" &&
-        !Array.isArray(groups)
-      ) {
-        return groups;
-      }
-
-      return {};
-    }
-
-    function getVariables(policyPackage) {
-      const variables = policyPackage?.variables;
-
-      if (
-        variables &&
-        typeof variables === "object" &&
-        !Array.isArray(variables)
-      ) {
-        return variables;
-      }
-
-      return {};
-    }
-
-    function getProfile(policyPackage) {
-      const groups = getPolicyGroups(policyPackage);
-      const variables = getVariables(policyPackage);
+    function inferProfile(policyPackage) {
+      const groups =
+        getObject(policyPackage?.policy_groups);
 
       if (
         typeof groups.profile === "string" &&
@@ -351,6 +445,9 @@
         return groups.profile;
       }
 
+      const variables =
+        getVariables(policyPackage);
+
       if (
         typeof variables.policy_profile === "string" &&
         ["full", "baseline", "custom"].includes(
@@ -360,44 +457,17 @@
         return variables.policy_profile;
       }
 
-      const packageName =
-        String(policyPackage?.name || "").toLowerCase();
-
-      if (packageName.startsWith("full")) {
-        return "full";
-      }
-
-      if (packageName.startsWith("custom")) {
+      /*
+       * A package containing explicit policy_groups represents
+       * a manually selected/custom policy configuration.
+       */
+      if (
+        Object.keys(getPolicyGroups(policyPackage)).length
+      ) {
         return "custom";
       }
 
       return "baseline";
-    }
-
-    function getEnabledPolicies(policyPackage) {
-      const groups = getPolicyGroups(policyPackage);
-
-      if (
-        groups.enabled_policies &&
-        typeof groups.enabled_policies === "object" &&
-        !Array.isArray(groups.enabled_policies)
-      ) {
-        return groups.enabled_policies;
-      }
-
-      const fallback = {};
-
-      for (const [key, value] of Object.entries(groups)) {
-        if (
-          key !== "profile" &&
-          key !== "enabled_policies" &&
-          Array.isArray(value)
-        ) {
-          fallback[key] = value;
-        }
-      }
-
-      return fallback;
     }
 
     function toggleCustomPolicies() {
@@ -405,6 +475,21 @@
         profile.value === "custom"
           ? "block"
           : "none";
+    }
+
+    function showImportMessage(message, isError = false) {
+      importMessage.className =
+        isError
+          ? "import-message import-error"
+          : "import-message";
+
+      importMessage.textContent = message;
+      importMessage.style.display = "block";
+    }
+
+    function hideImportMessage() {
+      importMessage.style.display = "none";
+      importMessage.textContent = "";
     }
 
     function showMessage(message) {
@@ -441,37 +526,213 @@
       }
     }
 
-    function populatePackage(policyPackage) {
-      loadedPackage = policyPackage;
+    function validateImportedPackage(packageData) {
+      if (
+        !packageData ||
+        typeof packageData !== "object" ||
+        Array.isArray(packageData)
+      ) {
+        throw new Error(
+          "The selected file must contain a JSON object"
+        );
+      }
 
+      if (
+        typeof packageData.name !== "string" ||
+        !packageData.name.trim()
+      ) {
+        throw new Error(
+          "The imported package requires a name"
+        );
+      }
+
+      if (
+        !Array.isArray(packageData.platforms) ||
+        !packageData.platforms.length
+      ) {
+        throw new Error(
+          "The imported package requires at least one platform"
+        );
+      }
+
+      const policyGroups =
+        getObject(packageData.policy_groups);
+
+      if (!Object.keys(policyGroups).length) {
+        throw new Error(
+          "The imported package requires policy_groups"
+        );
+      }
+
+      for (const [resourceType, policies] of
+        Object.entries(policyGroups)) {
+        if (
+          !resourceType.trim() ||
+          !Array.isArray(policies) ||
+          !policies.length ||
+          !policies.every(policy => {
+            return (
+              typeof policy === "string" &&
+              policy.trim()
+            );
+          })
+        ) {
+          throw new Error(
+            "Each policy group must contain a resource type " +
+            "and at least one policy"
+          );
+        }
+      }
+
+      const variables =
+        getObject(packageData.variables);
+
+      if (
+        variables.approved_regions !== undefined &&
+        !Array.isArray(variables.approved_regions)
+      ) {
+        throw new Error(
+          "variables.approved_regions must be an array"
+        );
+      }
+
+      if (
+        variables.approved_zones !== undefined &&
+        !Array.isArray(variables.approved_zones)
+      ) {
+        throw new Error(
+          "variables.approved_zones must be an array"
+        );
+      }
+
+      return {
+        name: packageData.name.trim(),
+
+        description:
+          typeof packageData.description === "string"
+            ? packageData.description
+            : "",
+
+        platforms:
+          packageData.platforms
+            .map(platform => String(platform).trim())
+            .filter(Boolean),
+
+        policy_groups: policyGroups,
+
+        variables
+      };
+    }
+
+    function populateFields(policyPackage) {
       const variables =
         getVariables(policyPackage);
 
-      const selectedProfile =
-        getProfile(policyPackage);
+      const policyGroups =
+        getPolicyGroups(policyPackage);
+
+      loadedPackage = policyPackage;
 
       document.getElementById("package_name").value =
         policyPackage.name || "";
 
-      document.getElementById("approved_regions").value =
+      document.getElementById(
+        "package_description"
+      ).value =
+        policyPackage.description || "";
+
+      document.getElementById("platforms").value =
+        Array.isArray(policyPackage.platforms)
+          ? policyPackage.platforms.join(", ")
+          : "";
+
+      document.getElementById(
+        "approved_regions"
+      ).value =
         Array.isArray(variables.approved_regions)
           ? variables.approved_regions.join(", ")
           : "";
 
-      document.getElementById("approved_zones").value =
+      document.getElementById(
+        "approved_zones"
+      ).value =
         Array.isArray(variables.approved_zones)
           ? variables.approved_zones.join(", ")
           : "";
 
-      profile.value = selectedProfile;
+      document.getElementById(
+        "google_provider_version"
+      ).value =
+        variables.google_provider_version || "";
 
-      document.getElementById("enabled_policies").value =
+      profile.value =
+        inferProfile(policyPackage);
+
+      document.getElementById(
+        "enabled_policies"
+      ).value =
+        formatEnabledPolicies(policyGroups);
+
+      importedPolicyGroups = null;
+      packageFile.value = "";
+      hideImportMessage();
+      toggleCustomPolicies();
+
+      packageForm.style.display = "block";
+    }
+
+    function populateImportedFields(packageData) {
+      const variables =
+        getVariables(packageData);
+
+      document.getElementById("package_name").value =
+        packageData.name;
+
+      document.getElementById(
+        "package_description"
+      ).value =
+        packageData.description || "";
+
+      document.getElementById("platforms").value =
+        packageData.platforms.join(", ");
+
+      document.getElementById(
+        "approved_regions"
+      ).value =
+        Array.isArray(variables.approved_regions)
+          ? variables.approved_regions.join(", ")
+          : "";
+
+      document.getElementById(
+        "approved_zones"
+      ).value =
+        Array.isArray(variables.approved_zones)
+          ? variables.approved_zones.join(", ")
+          : "";
+
+      document.getElementById(
+        "google_provider_version"
+      ).value =
+        variables.google_provider_version || "";
+
+      importedPolicyGroups =
+        packageData.policy_groups;
+
+      profile.value = "custom";
+
+      document.getElementById(
+        "enabled_policies"
+      ).value =
         formatEnabledPolicies(
-          getEnabledPolicies(policyPackage)
+          packageData.policy_groups
         );
 
       toggleCustomPolicies();
-      packageFields.style.display = "block";
+
+      showImportMessage(
+        "Imported package.json successfully. " +
+        "Review the populated fields before saving."
+      );
     }
 
     function populatePackageSelector(packages) {
@@ -495,7 +756,7 @@
         packageSelect.value =
           getPackageId(packages[0]);
 
-        populatePackage(packages[0]);
+        populateFields(packages[0]);
       }
     }
 
@@ -532,7 +793,7 @@
 
       if (!loadedPackages.length) {
         loadedPackage = null;
-        packageFields.style.display = "none";
+        packageForm.style.display = "none";
 
         throw new Error(
           "No policy packages were found for this organisation"
@@ -553,6 +814,7 @@
         event.preventDefault();
 
         result.style.display = "none";
+        packageForm.style.display = "none";
         loadButton.disabled = true;
         loadButton.textContent = "Loading...";
 
@@ -584,20 +846,73 @@
           });
 
         if (selectedPackage) {
-          populatePackage(selectedPackage);
+          populateFields(selectedPackage);
           result.style.display = "none";
+        }
+      }
+    );
+
+    packageFile.addEventListener(
+      "change",
+      async event => {
+        const file = event.target.files[0];
+
+        if (!file) {
+          importedPolicyGroups = null;
+          hideImportMessage();
+          return;
+        }
+
+        try {
+          const rawJson = await file.text();
+          const parsedJson = JSON.parse(rawJson);
+
+          const validatedPackage =
+            validateImportedPackage(parsedJson);
+
+          populateImportedFields(validatedPackage);
+          result.style.display = "none";
+        } catch (error) {
+          importedPolicyGroups = null;
+
+          showImportMessage(
+            error instanceof Error
+              ? error.message
+              : "Unable to import package.json",
+            true
+          );
+
+          packageFile.value = "";
         }
       }
     );
 
     profile.addEventListener(
       "change",
-      toggleCustomPolicies
+      () => {
+        /*
+         * Policy profile is a portal convenience. The saved
+         * package still uses direct policy_groups.
+         */
+        importedPolicyGroups = null;
+        toggleCustomPolicies();
+      }
     );
 
-    saveButton.addEventListener(
-      "click",
-      async () => {
+    document.getElementById(
+      "enabled_policies"
+    ).addEventListener(
+      "input",
+      () => {
+        importedPolicyGroups = null;
+      }
+    );
+
+    packageForm.addEventListener(
+      "submit",
+      async event => {
+        event.preventDefault();
+
         if (!loadedPackage) {
           showError(
             "Load a policy package before saving changes"
@@ -608,12 +923,61 @@
         const { orgId, apiKey } =
           getCredentials();
 
+        if (!orgId || !apiKey) {
+          showError(
+            "Organisation ID and API key are required"
+          );
+          return;
+        }
+
         const packageId =
           getPackageId(loadedPackage);
+
+        if (!packageId) {
+          showError(
+            "The selected policy package has no package ID"
+          );
+          return;
+        }
 
         const packageName =
           document
             .getElementById("package_name")
+            .value
+            .trim();
+
+        const packageDescription =
+          document
+            .getElementById("package_description")
+            .value
+            .trim();
+
+        const platforms =
+          parseList(
+            document
+              .getElementById("platforms")
+              .value
+          );
+
+        const approvedRegions =
+          parseList(
+            document
+              .getElementById("approved_regions")
+              .value
+          );
+
+        const approvedZones =
+          parseList(
+            document
+              .getElementById("approved_zones")
+              .value
+          );
+
+        const googleProviderVersion =
+          document
+            .getElementById(
+              "google_provider_version"
+            )
             .value
             .trim();
 
@@ -622,70 +986,78 @@
           return;
         }
 
-        const selectedProfile =
-          profile.value;
+        if (!platforms.length) {
+          showError(
+            "Add at least one platform"
+          );
+          return;
+        }
 
-        let enabledPolicies = {};
+        if (!approvedRegions.length) {
+          showError(
+            "Add at least one approved region"
+          );
+          return;
+        }
 
-        if (selectedProfile === "custom") {
-          try {
-            enabledPolicies =
-              parseEnabledPolicies(
-                document
-                  .getElementById("enabled_policies")
-                  .value
-              );
-          } catch (error) {
-            showError(
-              error instanceof Error
-                ? error.message
-                : "Invalid custom policy configuration"
+        let policyGroups;
+
+        try {
+          policyGroups =
+            importedPolicyGroups ||
+            parseEnabledPolicies(
+              document
+                .getElementById("enabled_policies")
+                .value
             );
-            return;
-          }
+        } catch (error) {
+          showError(
+            error instanceof Error
+              ? error.message
+              : "Invalid enabled policy configuration"
+          );
+          return;
         }
 
         const existingVariables =
           getVariables(loadedPackage);
 
+        /*
+         * The request uses the exact PDE package schema:
+         *
+         * policy_groups: {
+         *   resource_type: ["policy1", "policy2"]
+         * }
+         *
+         * It does not save profile or enabled_policies as
+         * nested fields.
+         */
+        const variables = {
+          ...existingVariables,
+          approved_regions: approvedRegions,
+          approved_zones: approvedZones
+        };
+
+        delete variables.policy_profile;
+
+        if (googleProviderVersion) {
+          variables.google_provider_version =
+            googleProviderVersion;
+        } else {
+          delete variables.google_provider_version;
+        }
+
         const requestBody = {
           name: packageName,
-
-          description:
-            `Updated ${selectedProfile} policy configuration`,
-
-          platforms:
-            Array.isArray(loadedPackage.platforms) &&
-            loadedPackage.platforms.length
-              ? loadedPackage.platforms
-              : ["gcp"],
-
-          policy_groups: {
-            profile: selectedProfile,
-            enabled_policies: enabledPolicies
-          },
-
-          variables: {
-            ...existingVariables,
-
-            approved_regions:
-              parseList(
-                document
-                  .getElementById("approved_regions")
-                  .value
-              ),
-
-            approved_zones:
-              parseList(
-                document
-                  .getElementById("approved_zones")
-                  .value
-              )
-          }
+          description: packageDescription,
+          platforms,
+          policy_groups: policyGroups,
+          variables
         };
 
         saveButton.disabled = true;
         saveButton.textContent = "Saving...";
+        result.style.display = "none";
 
         try {
           const response = await fetch(
@@ -698,15 +1070,19 @@
             }
           );
 
-          const updatedPackage =
+          const responseData =
             await readJson(response);
 
           if (!response.ok) {
             throw new Error(
-              updatedPackage.error ||
+              responseData.error ||
               "Unable to save policy package"
             );
           }
+
+          const updatedPackage =
+            responseData.package ||
+            responseData;
 
           loadedPackage = updatedPackage;
 
@@ -724,11 +1100,12 @@
           packageSelect.value =
             getPackageId(updatedPackage);
 
-          populatePackage(updatedPackage);
+          populateFields(updatedPackage);
 
           showMessage(
             "Policy package settings saved successfully. " +
-            "The updated configuration will apply to the next PDE Gate check."
+            "The updated configuration will apply to the " +
+            "next PDE Gate check."
           );
         } catch (error) {
           showError(
@@ -742,6 +1119,8 @@
         }
       }
     );
+
+    toggleCustomPolicies();
   </script>
 </body>
 </html>
