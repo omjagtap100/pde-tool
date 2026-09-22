@@ -33,5 +33,5 @@ export function resolvePlatform(
   if (gcpAdapter.detect(plan)) return "gcp";
   if (awsAdapter.detect(plan)) return "aws";
   if (azureAdapter.detect(plan)) return "azure";
-  return "gcp"; // MVP default
+  return "gcp";
 }

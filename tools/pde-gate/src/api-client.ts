@@ -118,7 +118,6 @@ export type CheckResult = {
   org_config?: Record<string, unknown>;
 };
 
-/** Upload plan to hosted API — Rego/OPA run on the server. */
 export async function runRemoteCheck(
   apiUrl: string,
   orgId: string,

@@ -395,10 +395,6 @@
       }
 
       try {
-        /*
-         * Step 1:
-         * Register the organisation and receive its API key.
-         */
         const registrationResponse = await fetch(
           "/v1/orgs/register",
           {
@@ -424,11 +420,6 @@
           );
         }
 
-        /*
-         * Step 2:
-         * Use the new API key to create the organisation's
-         * first policy package.
-         */
         const packageName =
           `${selectedProfile}-policy-package`;
 
@@ -478,9 +469,6 @@
           packageData.name || packageName
         );
 
-        /*
-         * Optional localhost callback for future CLI integration.
-         */
         if (
           callbackUrl &&
           isLocalCallback(callbackUrl)
@@ -509,10 +497,6 @@
               }
             }
           } catch {
-            /*
-             * The manual copy interface remains available if
-             * the local CLI callback cannot be contacted.
-             */
           }
         }
 

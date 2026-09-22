@@ -1,7 +1,6 @@
 import { DataTypes, Model, Optional } from "sequelize";
 import { sequelize } from "../sequelize.js";
 
-/** Matches existing local `orgs` table (token + legacy org fields). */
 export type OrgAttrs = {
   org_id: string;
   token: string;

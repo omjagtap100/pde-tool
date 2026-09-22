@@ -2,7 +2,6 @@ import fs from "node:fs";
 import * as api from "./api-client.js";
 import { loadCredentials, resolveAuth, saveCredentials } from "./credentials.js";
 
-// Global fetch needs Node 18+ (we require 20+ / .nvmrc 24).
 if (typeof fetch !== "function") {
   console.error(
     `Node ${process.version} has no global fetch. Use Node 20+ (in this folder: nvm use)`
@@ -199,7 +198,6 @@ async function main() {
       package_id: packageId,
       plan,
       platform,
-      // Fully enforce versions by default; relax with --no-strict-versions
       strict_versions: !has(args, "--no-strict-versions"),
     });
     for (const w of result.warnings ?? []) console.log(`PDE_GATE_WARN ${w}`);

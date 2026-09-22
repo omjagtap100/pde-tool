@@ -8,7 +8,6 @@ export type Credentials = {
   api_url?: string;
 };
 
-/** Load .env files from CWD or workspace root if present */
 export function loadDotEnv(): void {
   const possiblePaths = [
     path.join(process.cwd(), ".env"),
@@ -38,13 +37,11 @@ export function loadDotEnv(): void {
           }
         }
       } catch {
-        // ignore
       }
     }
   }
 }
 
-// Automatically load .env on import
 loadDotEnv();
 
 export function credentialsPath(): string {

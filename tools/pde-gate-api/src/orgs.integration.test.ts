@@ -1,7 +1,3 @@
-/**
- * API integration tests — need MySQL via tools/pde-gate-api/.env
- * Cases that break auth, validation, and package CRUD.
- */
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import dotenv from "dotenv";
@@ -102,7 +98,6 @@ test("API: register → login → auth → package CRUD lifecycle", async () => 
     assert.ok(org_id.startsWith("org_"));
     assert.ok(api_key.startsWith("pde_"));
 
-    // Test Login / API key recovery
     const loginOk = await json(srv.base, "POST", "/v1/orgs/login", {
       body: { email: testEmail, password: testPassword },
     });
